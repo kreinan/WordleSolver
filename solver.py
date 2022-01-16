@@ -1,4 +1,6 @@
 from collections import defaultdict
+import pickle
+import sys
 
 def wordValidForResult(guess, word, result):
     greenPos = [x for x in range(5) if result[x] == "g"]
@@ -61,46 +63,45 @@ def numEliminated(guess, word, possible, elimPerWord):
         elimPerWord[guess][result] = count
         return count
 
-def nextGuess(guessList, solutionList):
+def nextGuess(guessSet, solutionSet):
     guess = None
     avgEliminated = 0
 
     elimPerWord = defaultdict(lambda: defaultdict(int))
 
-    for g in guessList:
+    for g in guessSet:
         total = 0
 
-        for word in solutionList:
-            total += numEliminated(g, word, solutionList, elimPerWord)
+        for word in solutionSet:
+            total += numEliminated(g, word, solutionSet, elimPerWord)
 
-        avg = total/len(solutionList)
+        avg = total/len(solutionSet)
 
-        if avg > avgEliminated or (avg == avgEliminated and g in solutionList):
+        if avg > avgEliminated or (avg == avgEliminated and g in solutionSet):
             avgEliminated = avg
             guess = g
 
 
     return guess
 
-import pickle
 
 def play():
     with open("validGuesses.pkl","rb") as f:
-        guessList = pickle.load(f)
+        guessSet = pickle.load(f)
 
     with open("validSolutions.pkl","rb") as f:
-        solutionList = pickle.load(f)
+        solutionSet = pickle.load(f)
 
     for i in range(6):
-        print("There are " + str(len(solutionList)) + " possible words remaining.")
+        print("There are " + str(len(solutionSet)) + " possible words remaining.")
 
         if i == 0:
             # precomputed with nextGuess
             guess = "roate"
-        elif len(solutionList) == 1 or i == 5:
-            guess = next(iter(solutionList))
+        elif len(solutionSet) == 1 or i == 5:
+            guess = next(iter(solutionSet))
         else:
-            guess = nextGuess(guessList, solutionList)
+            guess = nextGuess(guessSet, solutionSet)
 
         print("Guess " + guess)
 
@@ -110,20 +111,43 @@ def play():
 
         if result == "ggggg":
             print("Congrats!")
-            break
+            return i+1
         elif i == 5:
             print("Oops, maybe next time.")
-            break
+            return False
 
-        removeList = set()
+        removeSet = set()
 
-        for word in solutionList:
+        for word in solutionSet:
             if not wordValidForResult(guess, word, result):
-                removeList.add(word)
+                removeSet.add(word)
 
-        solutionList = set([x for x in solutionList if x not in removeList])
+        solutionSet = set([x for x in solutionSet if x not in removeSet])
 
-        guessList.remove(guess)
+        guessSet.remove(guess)
 
 if __name__ == "__main__":
-    play()
+    result = play()
+    if len(sys.argv) > 1:
+        if sys.argv[1] in ["--keep-stats", "-ks"]:
+            try:
+                with open("stats.pkl", "rb") as f:
+                    stats = pickle.load(f)
+            except FileNotFoundError:
+                stats = {"gamesPlayed": 0, "gamesWon": 0, "averageGuesses": 0}
+
+            stats["gamesPlayed"] += 1
+
+            if result:
+                stats["averageGuesses"] = (stats["averageGuesses"] * stats["gamesWon"] + result)/(stats["gamesWon"] + 1)
+                stats["gamesWon"] += 1
+
+            winPercent = stats["gamesWon"]*100/stats["gamesPlayed"]
+            guesses = stats["averageGuesses"]
+
+            print(f"Win percentage: {winPercent}%")
+            if result:
+                print(f"Average guesses: {guesses}")
+
+            with open("stats.pkl", "wb") as f:
+                pickle.dump(stats, f)
